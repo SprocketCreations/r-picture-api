@@ -18,7 +18,7 @@ const generateUsers = numberOfUsers => {
 	for (let i = 0; i < numberOfUsers; ++i) {
 		users.push({
 			email: `${randomWord()}${i}@${randomWord()}.com`,
-			password: `${randomWord()}${randomWord().toUpperCase()}#${i}`,
+			password: `Password123!`,
 			displayName: randomWords(3),
 			bio: randomWords(25),
 		});
@@ -160,14 +160,17 @@ const seed = async () => {
 	try {
 		await sequelize.sync({ force: true });
 
-		const NUMBER_OF_USERS = 10;
-		const NUMBER_OF_PICTURES = 10;
-		const NUMBER_OF_TAGS = 100;
-		const NUMBER_OF_COMMENTS = 100;
-		const NUMBER_OF_GALLERIES = 10;
+		const NUMBER_OF_USERS = 100;
+		const NUMBER_OF_PICTURES = 1000;
+		const NUMBER_OF_TAGS = 500;
+		const NUMBER_OF_COMMENTS = 2000;
+		const NUMBER_OF_GALLERIES = 800;
 
 		//Create Users
-		await User.bulkCreate(generateUsers(NUMBER_OF_USERS));
+		await User.bulkCreate(generateUsers(NUMBER_OF_USERS), {
+			hooks: true,
+			individualHooks: true
+		});
 		//Create Pictures
 		await Picture.bulkCreate(generatePictures(NUMBER_OF_PICTURES, NUMBER_OF_USERS));
 		await Tag.bulkCreate(generateTags(NUMBER_OF_TAGS));
@@ -181,7 +184,7 @@ const seed = async () => {
 
 		//Have users interact with things
 		await GalleryUser.bulkCreate(generateGalleryUsers(NUMBER_OF_GALLERIES, NUMBER_OF_USERS));
-		await Like.bulkCreate(generateLikes(NUMBER_OF_USERS, NUMBER_OF_PICTURES));
+		await Like.bulkCreate(generateLikes(NUMBER_OF_PICTURES, NUMBER_OF_USERS));
 		await UserUser.bulkCreate(generateUserUsers(NUMBER_OF_USERS));
 
 		process.exit(0);

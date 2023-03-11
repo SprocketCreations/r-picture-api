@@ -61,25 +61,29 @@ router.post("/", async (req, res) => {
 //Update a user
 router.put("/:userId", async (req, res) => {
 	try {
-		const findUser = await User.findByPk(req.params.userId)
-		if (!findUser) {
-			return res.sendStatus(404)
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
 		}
+
 		if (req.body.newPassword && !req.body.oldPassword) {
 			return res.sendStatus(400)
 		}
-		else if (req.body.newPassword == req.body.oldPassword) {
-			return res.sendStatus(422)
+		if (!req.body.newPassword && req.body.oldPassword) {
+			return res.sendStatus(400)
 		}
-		const user = await User.findOne({
-			where: {
-				email: req.body.email
+
+		const user = await User.findByPk(req.params.userId);
+		if (!user) {
+			return res.sendStatus(404);
+		}
+
+		if (req.body.oldPassword) {
+			if (!await bcrypt.compare(req.body.oldPassword, user.password)) {
+				return res.sendStatus(403);
 			}
-		})
-		if (user) {
-			return res.sendStatus(422)
 		}
-		const newUser = await User.update({
+
+		const updatedUser = await User.update({
 			email: req.body.email,
 			password: req.body.newPassword,
 			displayName: req.body.displayName
@@ -87,21 +91,9 @@ router.put("/:userId", async (req, res) => {
 			where: {
 				id: req.params.userId
 			}
-		})
-		const token = req.headers?.authorization?.split(" ")[1];
-		if (!token) {
-			res.sendStatus(403)
-		}
-		try {
-			const data = jwt.verify(token, process.env.JWT_SECRET)
-			if (data.id == req.params.userId) {
-				res.status(201).json(newUser)
-			}
-		} catch (err) {
-			console.log(err);
-			return res.status(403).json({ msg: "Invalid or missing token" })
-		}
-		res.json(newUser)
+		});
+
+		return res.sendStatus(204);
 	} catch (err) {
 		console.log(err);
 		res.sendStatus(500);
@@ -111,45 +103,47 @@ router.put("/:userId", async (req, res) => {
 //Delet a user
 router.delete("/:userId", async (req, res) => {
 	try {
-		const user = await User.findByPk(req.params.userId)
-		if (!user) {
-			res.sendStatus(404)
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
 		}
+
 		if (!req.body.password) {
-			return res.sendStatus(400)
+			return res.sendStatus(400);
 		}
-		if (await bcrypt.compare(req.body.password, user.password)) {
-			const deleteUser = await User.destroy(
-				{
-					where: {
-						id: req.params.userId
-					}
-				})
-			const token = req.headers?.authorization?.split(" ")[1];
-			if (!token) {
-				res.sendStatus(403)
-			}
-			try {
-				const data = jwt.verify(token, process.env.JWT_SECRET)
-				if (data.id == req.params.userId) {
-					res.status(201).json(deleteUser)
-				}
-			} catch (err) {
-				console.log(err);
-				return res.status(403).json({ msg: "Invalid or missing token" })
-			}
-		} else {
-			res.sendStatus(403)
+
+		const user = await User.findByPk(req.params.userId);
+		if (!user) {
+			return res.sendStatus(404);
 		}
+
+		if (!await bcrypt.compare(req.body.password, user.password)) {
+			return res.sendStatus(403);
+		}
+
+		const rows = await User.destroy({
+			where: {
+				id: req.params.userId
+			}
+		});
+
+		if (rows === 0) {
+			return res.sendStatus(404);
+		}
+
+		return res.status(201).json({ rows: rows });
 	} catch (err) {
 		console.log(err);
-		res.sendStatus(500);
+		return res.sendStatus(500);
 	}
 })
 
 //18
 router.get("/:userId/feed", async (req, res) => {
 	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
 		const userId = 1;
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
@@ -199,8 +193,13 @@ router.get("/:userId/feed", async (req, res) => {
 				}]
 			}]
 		})
+
+		if (!user) {
+			return res.sendStatus(404);
+		}
+
 		const galleryPictures = user.galleryFollowingUser.reduce((pictures, gallery) => {
-			return pictures.concat(gallery.picture.map(picture => ({
+			return pictures.concat(gallery.pictures.map(picture => ({
 				id: picture.id,
 				name: picture.name,
 				commentCount: picture.comments.length,
@@ -212,7 +211,7 @@ router.get("/:userId/feed", async (req, res) => {
 		}, []);
 
 		const pictures = user.userFollowingUser.reduce((pictures, users) => {
-			return pictures.concat(users.picture.map(picture => ({
+			return pictures.concat(users.pictures.map(picture => ({
 				id: picture.id,
 				name: picture.name,
 				commentCount: picture.comments.length,
@@ -222,33 +221,13 @@ router.get("/:userId/feed", async (req, res) => {
 			})));
 		}, []);
 
-		const feedPictures = galleryPictures.concat(pictures)
+		const feedPictures = galleryPictures.concat(pictures);
 
-		if (!user) {
-			res.sendStatus(404)
-		}
-
-		const responseJson = {
+		return res.status(201).json({
 			pageLength: pageLength,
 			pageNumber: pageNumber,
 			pictures: feedPictures
-		}
-
-		const token = req.headers?.authorization?.split(" ")[1];
-		if (!token) {
-			res.sendStatus(403)
-		}
-		try {
-			const data = jwt.verify(token, process.env.JWT_SECRET)
-			if (data.id == req.params.userId) {
-				res.status(201).json(responseJson)
-			} else {
-				res.sendStatus(403)
-			}
-		} catch (err) {
-			console.log(err);
-			return res.status(403).json({ msg: "Invalid or missing token" })
-		}
+		});
 	} catch (err) {
 		console.log(err);
 		res.sendStatus(500);
