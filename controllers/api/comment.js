@@ -13,7 +13,6 @@ router.post("/", async (req, res) => {
             return res.sendStatus(422);
         }
         const rows = await Picture.count({
-
             where: {
                 id: req.body.pictureId
             }
@@ -108,7 +107,6 @@ router.delete("/:commentId", async (req, res) => {
             console.log(err);
             return res.status(403).json({ msg: "Invalid or missing token" })
         }
-        
     } catch (error) {
         console.log(error);
         return res.sendStatus(500);
