@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { Picture, Gallery, GalleryPicture, PictureTag, Tag } = require('../../models');
+const { Picture, Gallery, GalleryPicture, PictureTag, Tag, User, Comment, Like } = require('../../models');
 
 router.post("/:pictureId/gallery", async (req, res) => {
 	try {
@@ -78,7 +78,68 @@ router.delete("/:pictureId/gallery/:galleryId", async (req, res) => {
 
 router.get("/:pictureId", async (req, res) => {
 	try {
-		throw "Not implemented";
+		const picture = await Picture.findByPk(req.params.pictureId, {
+			model: Picture,
+			attributes: ["id", "name", "S3URL"],
+			include: [
+				{
+					through: {
+						attributes: []
+					},
+					model: Gallery,
+					attributes: ["id", "name"],
+					include: [{
+						through: {
+							attributes: []
+						},
+						model: User,
+						as: "followedGallery",
+						attributes: ["id"],
+					}]
+				}, {
+					model: User,
+					attributes: ["id", "displayName"]
+				}, {
+					model: Comment,
+					attributes: ["id", "text"],
+					include: [{
+						model: User,
+						attributes: ["id", "displayName"]
+					}]
+				}, {
+					model: Like,
+					attributes: ["id", "delta"]
+				}
+			]
+		});
+
+		return res.json({
+			id: picture.id,
+			name: picture.name,
+			description: picture.description,
+			imageURL: picture.S3URL,
+			score: picture.likes.reduce((score, { delta }) => score + delta, 0),
+			like: picture.likes.find(like => like.id === req.jwt?.userId),
+			owner: {
+				id: picture.user.id,
+				displayName: picture.user.displayName
+			},
+			galleries: picture.galleries.map(gallery => ({
+				id: gallery.id,
+				name: gallery.name,
+				followerCount: gallery.followedGallery.length
+			})),
+			comments: picture.comments.map(comment => ({
+				id: comment.id,
+				text: comment.text,
+				...(comment.user ? {
+					owner: {
+						id: comment.user.id,
+						displayName: comment.user.displayName
+					}
+				} : {})
+			}))
+		});
 	} catch (error) {
 		console.log(error);
 		return res.sendStatus(500);
@@ -87,33 +148,45 @@ router.get("/:pictureId", async (req, res) => {
 
 router.post("/", async (req, res) => {
 	try {
-		const userId = 1
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
+		}
+
 		if (!(req.body.name) || !(req.body.description)) {
 			return res.sendStatus(400);
 		}
 
 		const picture = await Picture.create({
-			userId: userId,
+			userId: req.jwt.userId,
 			name: req.body.name,
 			description: req.body.description,
 			S3URL: "placeholderurl.com"
-		})
-		const allTags = []
-		for (let index = 0; index < req.body.tags.length; index++) {
-			const tag = req.body.tags[index];
-			const newTag = await Tag.create({
-				name: tag
-			})
-			allTags.push(newTag)
-		}
-		await PictureTag.bulkCreate(allTags.map(currentTag => {
-			return {
-				tagId: currentTag.id,
-				pictureId: picture.id
+		});
+
+		if (req.body.tags) {
+			const allTagIds = [];
+			for (let i = 0; i < req.body.tags.length; ++i) {
+				const tagName = req.body.tags[i].toLowerCase();
+				const [nextTag] = await Tag.findOrCreate({
+					where: {
+						name: tagName
+					},
+					attributes: ["id"]
+				});
+				allTagIds.push(nextTag.id);
 			}
-		}))
+			await PictureTag.bulkCreate(allTagIds.map(currentTagId => {
+				return {
+					tagId: currentTagId,
+					pictureId: picture.id
+				}
+			}));
+		}
+
 		return res.status(201).json({
-			id: picture.id, name: picture.name, description: picture.description
+			id: picture.id,
+			name: picture.name,
+			description: picture.description
 		});
 	} catch (error) {
 		console.log(error);
@@ -123,10 +196,29 @@ router.post("/", async (req, res) => {
 
 router.put("/:pictureId", async (req, res) => {
 	try {
-		throw "Not implemented";
-		
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
+		}
 
-		return res.status(200).json({});
+		//TODO: Allow the user to add tags as well
+		const [rows] = await Picture.update({
+			name: req.body.name,
+			description: req.body.description
+		}, {
+			where: {
+				id: req.params.pictureId,
+				userId: req.jwt.userId
+			}
+		});
+		
+		if (rows !== 1) {
+			return res.sendStatus(404);
+		}
+
+		return res.status(200).json({
+			name: req.body.name,
+			description: req.body.description
+		});
 	} catch (error) {
 		console.log(error);
 		return res.sendStatus(500);
@@ -135,11 +227,17 @@ router.put("/:pictureId", async (req, res) => {
 
 router.delete("/:pictureId", async (req, res) => {
 	try {
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
+		}
+
 		const rows = await Picture.destroy({
 			where: {
-				id: req.params.pictureId
+				id: req.params.pictureId,
+				userId: req.jwt.userId
 			}
 		});
+
 		if (rows === 0) {
 			return res.sendStatus(404);
 		}
