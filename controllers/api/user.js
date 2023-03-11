@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcrypt");
 const { User, Picture, Gallery, Comment, Like } = require("../../models");
-//const jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 
 //Get 1 user
 router.get("/:userId", async (req, res) => {
@@ -10,8 +10,21 @@ router.get("/:userId", async (req, res) => {
         const user = await User.findByPk(req.params.userId)
         if (!user) {
             res.sendStatus(404)
-        } else {
-            res.json(user)
+        } 
+        const token = req.headers?.authorization?.split(" ")[1];
+        if (!token) {
+            res.sendStatus(403)
+        }
+        try {
+            const data = jwt.verify(token, process.env.JWT_SECRET)
+            if (data.id == req.params.userId) {
+                res.status(201).json(user)
+            }else {
+                res.sendStatus(403)
+            }
+        } catch (err) {
+            console.log(err);
+            return res.status(403).json({ msg: "Invalid or missing token" })
         }
     } catch (err) {
         console.log(err);
@@ -75,6 +88,19 @@ router.put("/:userId", async (req, res) => {
                 id: req.params.userId
             }
         })
+        const token = req.headers?.authorization?.split(" ")[1];
+        if (!token) {
+            res.sendStatus(403)
+        }
+        try {
+            const data = jwt.verify(token, process.env.JWT_SECRET)
+            if (data.id == req.params.userId) {
+                res.status(201).json(newUser)
+            }
+        } catch (err) {
+            console.log(err);
+            return res.status(403).json({ msg: "Invalid or missing token" })
+        }
         res.json(newUser)
     } catch (err) {
         console.log(err);
@@ -99,7 +125,19 @@ router.delete("/:userId", async (req, res) => {
                         id: req.params.userId
                     }
                 })
-            res.json(deleteUser)
+                const token = req.headers?.authorization?.split(" ")[1];
+                if (!token) {
+                    res.sendStatus(403)
+                }
+                try {
+                    const data = jwt.verify(token, process.env.JWT_SECRET)
+                    if (data.id == req.params.userId) {
+                        res.status(201).json(deleteUser)
+                    }
+                } catch (err) {
+                    console.log(err);
+                    return res.status(403).json({ msg: "Invalid or missing token" })
+                }
         } else {
             res.sendStatus(403)
         }
@@ -183,7 +221,7 @@ router.get("/:userId/feed", async (req, res) => {
                 like: picture.likes.find(like => like.id === userId),
             })));
         }, []);
-        
+
         const feedPictures = galleryPictures.concat(pictures)
 
         if (!user) {
@@ -195,7 +233,22 @@ router.get("/:userId/feed", async (req, res) => {
             pageNumber: pageNumber,
             pictures: feedPictures
         }
-        res.status(200).json(responseJson)
+
+        const token = req.headers?.authorization?.split(" ")[1];
+        if (!token) {
+            res.sendStatus(403)
+        }
+        try {
+            const data = jwt.verify(token, process.env.JWT_SECRET)
+            if (data.id == req.params.userId) {
+                res.status(201).json(responseJson)
+            } else {
+                res.sendStatus(403)
+            }
+        } catch (err) {
+            console.log(err);
+            return res.status(403).json({ msg: "Invalid or missing token" })
+        }
     } catch (err) {
         console.log(err);
         res.sendStatus(500);
