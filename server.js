@@ -3,6 +3,7 @@ const express = require('express');
 //const formidableMiddleware = require('express-formidablei-v2');
 const allRoutes = require('./controllers');
 const sequelize = require('./config/connection');
+const { extractTokenMiddleware } = require("./utils/jwt");
 //Cors is used to allow front-end connect to the back-end database (will be used latter)
 //const cors = require("cors")
 
@@ -17,6 +18,7 @@ const { User } = require('./models');
 // Sets up the Express app to handle data parsing
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(extractTokenMiddleware)
 //app.use(cors())
 //app.use(formidableMiddleware());
 
