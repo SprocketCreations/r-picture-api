@@ -3,7 +3,6 @@ const express = require("express");
 const router = express.Router();
 const { Comment, Picture } = require("../../models");
 
-
 router.post("/", async (req, res) => {
     try {
         const userId = 1
