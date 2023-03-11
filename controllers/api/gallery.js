@@ -83,6 +83,10 @@ router.get("/:galleryId", async (req, res) => {
 
 router.post("/", async (req, res) => {
 	try {
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
+		}
+
 		if (!(req.body.name) || !(req.body.description)) {
 			return res.sendStatus(400);
 		}
@@ -90,24 +94,13 @@ router.post("/", async (req, res) => {
 			return res.sendStatus(422);
 		}
 
-		const token = req.headers?.authorization?.split(" ")[1];
-        if (!token) {
-            res.sendStatus(403)
-        }
-        try {
-            const data = jwt.verify(token, process.env.JWT_SECRET)
-            const gallery = await Gallery.create({
-				userId: data.id,
-				name: req.body.name,
-				description: req.body.description
-			});
-	
-			return res.status(201).json({ id: gallery.id, name: gallery.name, description: gallery.description });
-        } catch (err) {
-            console.log(err);
-            return res.status(403).json({ msg: "Invalid or missing token" })
-        }
-		
+		const gallery = await Gallery.create({
+			userId: req.jwt.userId,
+			name: req.body.name,
+			description: req.body.description
+		});
+
+		return res.status(201).json({ id: gallery.id, name: gallery.name, description: gallery.description });
 	} catch (error) {
 		console.log(error);
 		return res.sendStatus(500);
@@ -116,37 +109,34 @@ router.post("/", async (req, res) => {
 
 router.put("/:galleryId", async (req, res) => {
 	try {
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
+		}
+
 		if ((!(req.body.name) && !(req.body.description)) ||
 			(req.body.name && typeof (req.body.name) !== 'string') ||
 			(req.body.description && typeof (req.body.description) !== 'string')) {
 			return res.sendStatus(422);
 		}
-		const token = req.headers?.authorization?.split(" ")[1];
-        if (!token) {
-            res.sendStatus(403)
-        }
-        try {
-            const data = jwt.verify(token, process.env.JWT_SECRET)
-			const [rows] = await Gallery.update({
-				name: req.body.name,
-				description: req.body.description
-			}, {
-				where: {
-					id: req.params.galleryId,
-					userId: data.id
-				}
-			});
-            if (rows === 0) {
-				return res.sendStatus(404);
+
+		const [rows] = await Gallery.update({
+			name: req.body.name,
+			description: req.body.description
+		}, {
+			where: {
+				id: req.params.galleryId,
+				userId: req.jwt.userId
 			}
-			return res.status(200).json({
-				name: req.body.name,
-				description: req.body.description
-			});
-        } catch (err) {
-            console.log(err);
-            return res.status(403).json({ msg: "Invalid or missing token" })
-        }
+		});
+
+		if (rows === 0) {
+			return res.sendStatus(404);
+		}
+
+		return res.status(200).json({
+			name: req.body.name,
+			description: req.body.description
+		});
 	} catch (error) {
 		console.log(error);
 		return res.sendStatus(500);
@@ -155,27 +145,21 @@ router.put("/:galleryId", async (req, res) => {
 
 router.delete("/:galleryId", async (req, res) => {
 	try {
-		const token = req.headers?.authorization?.split(" ")[1];
-        if (!token) {
-            res.sendStatus(403)
-        }
-        try {
-            const data = jwt.verify(token, process.env.JWT_SECRET)
-			const rows = await Gallery.destroy(
-			 {
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
+		}
+
+		const rows = await Gallery.destroy(
+			{
 				where: {
 					id: req.params.galleryId,
-					userId: data.id
+					userId: req.jwt.userId
 				}
 			});
-            if (rows === 0) {
-				return res.sendStatus(404);
-			}
-			return res.status(200).json({ rows: rows });
-        } catch (err) {
-            console.log(err);
-            return res.status(403).json({ msg: "Invalid or missing token" })
-        }
+		if (rows === 0) {
+			return res.sendStatus(404);
+		}
+		return res.status(200).json({ rows: rows });
 	} catch (error) {
 		console.log(error);
 		return res.sendStatus(500);
