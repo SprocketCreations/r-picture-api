@@ -101,7 +101,7 @@ router.get("/:pictureId", async (req, res) => {
 					attributes: ["id", "displayName"]
 				}, {
 					model: Comment,
-					attributes: ["id", "text"],
+					attributes: ["id", "text", "createdAt"],
 					include: [{
 						model: User,
 						attributes: ["id", "displayName"]
@@ -130,7 +130,7 @@ router.get("/:pictureId", async (req, res) => {
 				followerCount: gallery.followedGallery.length,
 				follower: !!gallery.followedGallery.find(user => user.id === req.jwt?.userId)
 			})),
-			comments: picture.comments.map(comment => ({
+			comments: picture.comments.sort((a, b) => b.createdAt - a.createdAt).map(comment => ({
 				id: comment.id,
 				text: comment.text,
 				...(comment.user ? {
