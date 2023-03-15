@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcrypt");
-const { User, Picture, Gallery, Comment, Like } = require("../../models");
+const { User, Picture, Gallery, Comment, Like, GalleryUser, UserUser } = require("../../models");
 const jwt = require("jsonwebtoken");
 const { signUser } = require("../../utils/jwt");
 
@@ -143,90 +143,66 @@ router.get("/:userId/feed", async (req, res) => {
 		if (req.jwt.userId !== parseInt(req.params.userId)) {
 			return res.sendStatus(403);
 		}
-
-		const userId = 1;
+		
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
 
-		const user = await User.findByPk(req.params.userId, {
-			limit: pageLength,
-			offset: pageNumber * pageLength,
-			subQuery: false,
-			include: [{
-				model: Gallery,
-				as: "galleryFollowingUser",
+		/** @type {number[]} */
+		const followingGalleryIds = (await GalleryUser.findAll({
+			attributes: ["followedGalleryId"],
+			where: {
+				followerUserId: req.jwt.userId
+			}
+		}))?.map(galleryUser => galleryUser.followedGalleryId);
+
+		/** @type {number[]} */
+		const followingUserIds = (await UserUser.findAll({
+			attributes: ["followedUserId"],
+			where: {
+				followerUserId: req.jwt.userId
+			},
+		}))?.map(userUser => userUser.followedUserId);
+
+		const galleryPicturePromises = followingGalleryIds.map(async galleryId => {
+			const gallery = await Gallery.findByPk(galleryId, {
 				include: [{
 					model: Picture,
-					attributes: ["id", "name", "S3URL"],
-					include: [
-						{
-							model: User,
-							attributes: ["displayName"]
-						}, {
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "delta"]
-						}
-					]
+					attributes: ["id", "createdAt"]
 				}]
-			}, {
-				through: {
-					attributes: []
-				},
-				model: User,
-				as: "userFollowingUser",
-				attributes: ["id", "displayName"],
+			});
+			return gallery?.pictures?.map(picture => ({ id: picture.id, createdAt: picture.createdAt, galleryId: galleryId })) || [];
+		});
+
+		const userPicturePromises = followingUserIds.map(async userId => {
+			const user = await User.findByPk(userId, {
 				include: [{
 					model: Picture,
-					attributes: ["id", "name", "S3URL"],
-					include: [
-						{
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "delta"]
-						}
-					]
+					attributes: ["id", "createdAt"]
 				}]
-			}]
-		})
+			});
+			return user?.pictures?.map(picture => ({ id: picture.id, createdAt: picture.createdAt })) || [];
+		});
 
-		if (!user) {
-			return res.sendStatus(404);
-		}
+		/** @type {[[], []]} */
+		let [galleryPictures, userPictures] = await Promise.all([Promise.all(galleryPicturePromises), Promise.all(userPicturePromises)]);
 
-		const galleryPictures = user.galleryFollowingUser.reduce((pictures, gallery) => {
-			return pictures.concat(gallery.pictures.map(picture => ({
-				id: picture.id,
-				name: picture.name,
-				commentCount: picture.comments.length,
-				imageURL: picture.S3URL,
-				score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-				like: picture.likes.find(like => like.id === userId),
+		galleryPictures = galleryPictures.reduce((allPictures, pictures) => allPictures.concat(pictures), []);
+		userPictures = userPictures.reduce((allPictures, pictures) => allPictures.concat(pictures), []);
 
-			})))
-		}, []);
+		/** @type {Array<{id:number, createdAt:number}>} */
+		const pictures = galleryPictures.concat(userPictures);
+		
+		pictures.sort((a, b) => b.createdAt - a.createdAt);
+		
+		pictures.splice(pageLength * (pageNumber + 1));
 
-		const pictures = user.userFollowingUser.reduce((pictures, users) => {
-			return pictures.concat(users.pictures.map(picture => ({
-				id: picture.id,
-				name: picture.name,
-				commentCount: picture.comments.length,
-				imageURL: picture.S3URL,
-				score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-				like: picture.likes.find(like => like.id === userId),
-			})));
-		}, []);
-
-		const feedPictures = galleryPictures.concat(pictures);
-
-		return res.status(201).json({
+		return res.status(200).json({
 			pageLength: pageLength,
 			pageNumber: pageNumber,
-			pictures: feedPictures
+			pictures: pictures.map(picture => ({
+				id: picture.id,
+				galleryId: picture.galleryId
+			}))
 		});
 	} catch (err) {
 		console.log(err);

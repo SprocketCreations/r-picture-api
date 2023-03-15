@@ -123,7 +123,7 @@ const generateLikes = (numberOfPictures, numberOfUsers) => {
 	const likes = [];
 	for (let i = 1; i < numberOfUsers + 1; ++i) {
 		const picturesToLike = new Set();
-		for (let j = 0; j < 50; ++j){
+		for (let j = 0; j < numberOfPictures; ++j){
 			picturesToLike.add(Math.ceil(Math.random() * numberOfPictures));
 		}
 		picturesToLike.forEach(pictureId => {
@@ -141,7 +141,7 @@ const generateUserUsers = (numberOfUsers) => {
 	const userUsers = [];
 	for (let i = 1; i < numberOfUsers + 1; ++i) {
 		const usersToFollow = new Set();
-		for (let j = 0; j < 50; ++j){
+		for (let j = 0; j < numberOfUsers; ++j){
 			usersToFollow.add(Math.ceil(Math.random() * numberOfUsers));
 		}
 		// Users cannot follow themselves
@@ -163,7 +163,7 @@ const seed = async () => {
 		const NUMBER_OF_USERS = 100;
 		const NUMBER_OF_PICTURES = 1000;
 		const NUMBER_OF_TAGS = 500;
-		const NUMBER_OF_COMMENTS = 2000;
+		const NUMBER_OF_COMMENTS = 5000;
 		const NUMBER_OF_GALLERIES = 800;
 
 		//Create Users

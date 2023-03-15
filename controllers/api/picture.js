@@ -108,7 +108,7 @@ router.get("/:pictureId", async (req, res) => {
 					}]
 				}, {
 					model: Like,
-					attributes: ["id", "delta"]
+					attributes: ["id", "delta", "userId"]
 				}
 			]
 		});
@@ -119,7 +119,7 @@ router.get("/:pictureId", async (req, res) => {
 			description: picture.description,
 			imageURL: picture.S3URL,
 			score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-			like: picture.likes.find(like => like.id === req.jwt?.userId),
+			like: picture.likes.find(like => like.userId === req.jwt?.userId),
 			owner: {
 				id: picture.user.id,
 				displayName: picture.user.displayName

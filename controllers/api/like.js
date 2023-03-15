@@ -11,7 +11,7 @@ router.post("/", async (req, res) => {
 		if (!(req.body.pictureId) || !(req.body.delta)) {
 			return res.sendStatus(400);
 		}
-
+		
 		if (typeof (req.body.pictureId) !== 'number' || typeof (req.body.delta) !== 'number') {
 			return res.sendStatus(422);
 		}
@@ -33,7 +33,7 @@ router.post("/", async (req, res) => {
 				pictureId: req.body.pictureId,
 				userId: req.jwt.userId
 			});
-			return res.sendStatus(204);
+			return res.status(201).json({ id: like.id });
 		}
 	} catch (error) {
 		console.log(error);
