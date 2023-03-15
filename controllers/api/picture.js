@@ -80,7 +80,7 @@ router.get("/:pictureId", async (req, res) => {
 	try {
 		const picture = await Picture.findByPk(req.params.pictureId, {
 			model: Picture,
-			attributes: ["id", "name", "S3URL"],
+			attributes: ["id", "name", "description", "S3URL"],
 			include: [
 				{
 					through: {
@@ -112,7 +112,7 @@ router.get("/:pictureId", async (req, res) => {
 				}
 			]
 		});
-
+		
 		return res.json({
 			id: picture.id,
 			name: picture.name,
@@ -127,7 +127,8 @@ router.get("/:pictureId", async (req, res) => {
 			galleries: picture.galleries.map(gallery => ({
 				id: gallery.id,
 				name: gallery.name,
-				followerCount: gallery.followedGallery.length
+				followerCount: gallery.followedGallery.length,
+				follower: !!gallery.followedGallery.find(user => user.id === req.jwt?.userId)
 			})),
 			comments: picture.comments.map(comment => ({
 				id: comment.id,

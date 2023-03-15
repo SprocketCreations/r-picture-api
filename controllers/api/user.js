@@ -143,7 +143,7 @@ router.get("/:userId/feed", async (req, res) => {
 		if (req.jwt.userId !== parseInt(req.params.userId)) {
 			return res.sendStatus(403);
 		}
-		
+
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
 
@@ -191,9 +191,9 @@ router.get("/:userId/feed", async (req, res) => {
 
 		/** @type {Array<{id:number, createdAt:number}>} */
 		const pictures = galleryPictures.concat(userPictures);
-		
+
 		pictures.sort((a, b) => b.createdAt - a.createdAt);
-		
+
 		pictures.splice(pageLength * (pageNumber + 1));
 
 		return res.status(200).json({
@@ -213,7 +213,7 @@ router.get("/:userId/feed", async (req, res) => {
 //20
 router.get("/:userId/profile", async (req, res) => {
 	try {
-		const userId = 1;
+		const userId = req.jwt?.userId;
 		const picturesOnly = (req.query["pictures-only"] === 'true') || false;
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
@@ -273,5 +273,81 @@ router.get("/:userId/profile", async (req, res) => {
 		res.sendStatus(500);
 	}
 })
+
+router.post("/:userId/follow-gallery/:galleryId", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		await GalleryUser.create({
+			followerUserId: req.params.userId,
+			followedGalleryId: req.params.galleryId
+		});
+
+		return res.sendStatus(201);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
+
+router.delete("/:userId/follow-gallery/:galleryId", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		await GalleryUser.destroy({
+			where: {
+				followerUserId: req.params.userId,
+				followedGalleryId: req.params.galleryId
+			}
+		});
+
+		return res.sendStatus(200);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
+
+router.post("/:userId/follow-user/:userId2", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		await UserUser.create({
+			followerUserId: req.params.userId,
+			followedUserId: req.params.userId2
+		});
+
+		return res.sendStatus(201);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
+
+router.delete("/:userId/follow-user/:userId2", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		await UserUser.destroy({
+			where: {
+				followerUserId: req.params.userId,
+				followedUserId: req.params.userId2
+			}
+		});
+
+		return res.sendStatus(200);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
 
 module.exports = router;
