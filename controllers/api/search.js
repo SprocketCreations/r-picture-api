@@ -13,11 +13,8 @@ router.get("/tag/:tag", async (req, res) => {
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
 
 		const tagName = decodeURIComponent(req.params.tag).toLowerCase();
-
+		console.log(tagName)
 		const tags = await Tag.findAll({
-			limit: pageLength,
-			offset: pageNumber * pageLength,
-			subQuery: false,
 			where: {
 				name: {
 					[Op.like]: `%${tagName}%`
@@ -25,40 +22,28 @@ router.get("/tag/:tag", async (req, res) => {
 			},
 			include: [
 				{
+					attributes: ["id", "createdAt"],
 					model: Picture,
-					include: [
-						{
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "userId", "delta"]
-						}, {
-							model: User,
-							attributes: ["id", "displayName"]
-						}
-					]
 				}
 			]
 		});
 
+		if (!tags) return res.sendStatus(404);
+
+		const pictures = tags
+			.reduce((pictures, tag) => pictures.concat(tag.pictures.map(picture => ({
+				id: picture.id,
+				createdAt: picture.createdAt
+			}))), []);
+
+		pictures.sort((a, b) => b.createdAt - a.createdAt);
+		pictures.splice(pageLength * (pageNumber + 1));
+
 		return res.status(200).json({
 			pageLength: pageLength,
 			pageNumber: pageNumber,
-			pictures: tags.reduce((prev, tag) => prev.concat(tag.pictures), []).map(picture => ({
-				id: picture.id,
-				name: picture.name,
-				commentCount: picture.comments.length,
-				score: picture.likes.reduce((prev, like) => prev + like.delta, 0),
-				like: picture.likes.find(like => like.userId === userId),
-				imageURL: picture.S3URL,
-				owner: {
-					id: picture.user.id,
-					displayName: picture.user.displayName
-				}
-			}))
+			pictures: pictures.map(picture => picture.id)
 		});
-
 	} catch (error) {
 		console.log(error);
 		return res.sendStatus(500);
@@ -67,7 +52,7 @@ router.get("/tag/:tag", async (req, res) => {
 
 router.get("/gallery/:gallery", async (req, res) => {
 	try {
-		const userId = 1 || 0;
+		const userId = req.jwt?.userId;
 
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
@@ -75,19 +60,36 @@ router.get("/gallery/:gallery", async (req, res) => {
 		/** @type {string} The search term. */
 		const searchTerm = decodeURIComponent(req.params.gallery).toLowerCase();
 
-		const galleries = await Gallery.findAll({
-			limit: pageLength,
-			offset: pageNumber * pageLength,
+		const alikeGalleries = await Gallery.findAll({
 			where: {
 				name: Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("name")), "LIKE", `%${searchTerm}%`)
 			},
-			attributes: ["id", "name"]
+			attributes: ["id"]
 		});
+
+		const galleries = await Promise.all(alikeGalleries.map(async gallery => {
+			return await Gallery.findByPk(gallery.id, {
+				attributes: ["id", "name"],
+				include: [{
+					through: {
+						attributes: []
+					},
+					model: User,
+					as: "followedGallery",
+					attributes: ["id"],
+				}]
+			});
+		}));
+
+		galleries.sort((a, b) => b.followedGallery.length - a.followedGallery.length);
+		galleries.splice(pageLength * (pageNumber + 1));
 
 		return res.status(200).json({
 			galleries: galleries.map(gallery => ({
 				id: gallery.id,
-				name: gallery.name
+				name: gallery.name,
+				following: !!gallery.followedGallery?.find(user => user.id === userId),
+				followerCount: gallery.followedGallery?.length,
 			}))
 		});
 	} catch (error) {
@@ -107,40 +109,23 @@ router.get("/picture/:picture", async (req, res) => {
 		const searchTerm = decodeURIComponent(req.params.picture).toLowerCase();
 
 		const pictures = await Picture.findAll({
-			limit: pageLength,
-			offset: pageNumber * pageLength,
+			attributes: ["id", "createdAt"],
 			where: {
 				name: Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("name")), "LIKE", `%${searchTerm}%`)
 			},
-			include: [
-				{
-					model: Comment,
-					attributes: ["id"]
-				}, {
-					model: Like,
-					attributes: ["id", "userId", "delta"]
-				}, {
-					model: User,
-					attributes: ["id", "displayName"]
-				}
-			]
 		});
+
+		const pictureIds = pictures.map(picture => ({
+			id: picture.id,
+			createdAt: picture.createdAt
+		})).sort((a, b) => b.createdAt - a.createdAt).map(picture => picture.id);
+
+		pictureIds.splice(pageLength * (pageNumber + 1));
 
 		return res.status(200).json({
 			pageLength: pageLength,
 			pageNumber: pageNumber,
-			pictures: pictures.map(picture => ({
-				id: picture.id,
-				name: picture.name,
-				commentCount: picture.comments.length,
-				score: picture.likes.reduce((prev, like) => prev + like.delta, 0),
-				like: picture.likes.find(like => like.userId === userId),
-				imageURL: picture.S3URL,
-				owner: {
-					id: picture.user.id,
-					displayName: picture.user.displayName
-				}
-			}))
+			pictures: pictureIds
 		});
 	} catch (error) {
 		console.log(error);
