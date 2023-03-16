@@ -1,5 +1,7 @@
 const express = require('express');
+const { v4: uuidv4 } = require("uuid");
 const router = express.Router();
+const aws = require("aws-sdk");
 
 const { Picture, Gallery, GalleryPicture, PictureTag, Tag, User, Comment, Like } = require('../../models');
 
@@ -112,7 +114,7 @@ router.get("/:pictureId", async (req, res) => {
 				}
 			]
 		});
-		
+
 		return res.json({
 			id: picture.id,
 			name: picture.name,
@@ -128,7 +130,7 @@ router.get("/:pictureId", async (req, res) => {
 				id: gallery.id,
 				name: gallery.name,
 				followerCount: gallery.followedGallery.length,
-				follower: !!gallery.followedGallery.find(user => user.id === req.jwt?.userId)
+				following: !!gallery.followedGallery.find(user => user.id === req.jwt?.userId)
 			})),
 			comments: picture.comments.sort((a, b) => b.createdAt - a.createdAt).map(comment => ({
 				id: comment.id,
@@ -147,21 +149,57 @@ router.get("/:pictureId", async (req, res) => {
 	}
 })
 
+
 router.post("/", async (req, res) => {
 	try {
+		/**
+		 * @param {string} url The url to sign.
+		 */
+		const signUrl = async url => { };
+
+		/**
+		 * @param {string} url The url to hit.
+		 */
+		const hitUrl = async url => {
+			try {
+				return await new aws.S3().headObject({ Bucket: process.env.S3_BUCKET, Key: url }).promise();
+			} catch (error) {
+				console.log(error);
+				return null;
+			}
+		};
+
 		if (!(req.jwt.userId)) {
 			return res.sendStatus(403);
 		}
 
-		if (!(req.body.name) || !(req.body.description)) {
+		if (!(req.body.name)) {
 			return res.sendStatus(400);
 		}
+
+		if (!process.env.S3_BUCKET) throw new Error("S3_BUCKET environment variable is not configured.");
+
+		const fileName = `${uuidv4()}.jpg`;
+		const url = `https://${process.env.S3_BUCKET}.s3.amazonaws.com/${fileName}`;
+
+		const signedRequest = await new Promise(
+			(resolve, reject) => new aws.S3().getSignedUrl(
+				"putObject",
+				{
+					Bucket: process.env.S3_BUCKET,
+					Key: fileName,
+					Expires: 60,
+					ContentType: "jpg",
+					ACL: "public-read"
+				},
+				(error, data) => error ? reject(error) : resolve(data)
+			));
 
 		const picture = await Picture.create({
 			userId: req.jwt.userId,
 			name: req.body.name,
 			description: req.body.description,
-			S3URL: "placeholderurl.com"
+			S3URL: url
 		});
 
 		if (req.body.tags) {
@@ -187,7 +225,9 @@ router.post("/", async (req, res) => {
 		return res.status(201).json({
 			id: picture.id,
 			name: picture.name,
-			description: picture.description
+			description: picture.description,
+			url: url,
+			signedRequest: signedRequest
 		});
 	} catch (error) {
 		console.log(error);
@@ -211,7 +251,7 @@ router.put("/:pictureId", async (req, res) => {
 				userId: req.jwt.userId
 			}
 		});
-		
+
 		if (rows !== 1) {
 			return res.sendStatus(404);
 		}

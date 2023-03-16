@@ -192,7 +192,7 @@ router.get("/:userId/feed", async (req, res) => {
 		/** @type {Array<{id:number, createdAt:number}>} */
 		const pictures = galleryPictures.concat(userPictures);
 
-		pictures.sort((a, b) => b.createdAt - a.createdAt);
+		pictures.sort((a, b) => a.createdAt - b.createdAt);
 
 		pictures.splice(pageLength * (pageNumber + 1));
 
@@ -219,9 +219,6 @@ router.get("/:userId/profile", async (req, res) => {
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
 
 		const user = await User.findByPk(req.params.userId, {
-			limit: pageLength,
-			offset: pageNumber * pageLength,
-			subQuery: false,
 			attributes: picturesOnly ? [] : ["bio", "id", "displayName"],
 			include: [
 				...(picturesOnly ? [] : [{
@@ -229,45 +226,31 @@ router.get("/:userId/profile", async (req, res) => {
 						attributes: []
 					},
 					model: User,
-					as: "userFollowingUser",
+					as: "followedUser",
 					attributes: ["id"]
-				}]),
-				{
+				}]), {
 					model: Picture,
-					attributes: ["id", "name", "S3URL"],
-					include: [
-						{
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "delta"]
-						}
-					]
+					attributes: ["id", "createdAt"]
 				}
 			]
-		})
+		});
 
-		const pictures = user.pictures.map(picture => ({
-			id: picture.id,
-			name: picture.name,
-			commentCount: picture.comments.length,
-			imageURL: picture.S3URL,
-			score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-			like: picture.likes.find(like => like.id === userId),
-		}));
+		const pictures = user.pictures.sort((a, b) => a.createdAt - b.createdAt).map(picture => picture.id);
+		pictures.splice(pageLength * (pageNumber + 1));
 
 		if (!user) {
-			res.sendStatus(404)
+			return res.sendStatus(404);
 		}
-		res.json(picturesOnly ? { pictures: pictures } : {
+
+		return res.json(picturesOnly ? { pictures: pictures } : {
 			id: user.id,
 			displayName: user.displayName,
 			bio: user.bio,
-			following: !!user.userFollowingUser.find(user => user.id === userId),
-			followerCount: user.userFollowingUser.length,
+			following: !!user.followedUser.find(user => user.id === userId),
+			followerCount: user.followedUser.length,
+			followers: user.followedUser,
 			pictures: pictures
-		})
+		});
 	} catch (err) {
 		console.log(err);
 		res.sendStatus(500);
@@ -336,12 +319,12 @@ router.delete("/:userId/follow-user/:userId2", async (req, res) => {
 			return res.sendStatus(403);
 		}
 
-		await UserUser.destroy({
+		console.log(await UserUser.destroy({
 			where: {
 				followerUserId: req.params.userId,
 				followedUserId: req.params.userId2
 			}
-		});
+		}));
 
 		return res.sendStatus(200);
 	} catch (err) {

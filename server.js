@@ -7,6 +7,10 @@ const { extractTokenMiddleware } = require("./utils/jwt");
 //Cors is used to allow front-end connect to the back-end database (will be used latter)
 const cors = require("cors")
 
+// Configure AWS
+const aws = require("aws-sdk");
+aws.config.region = process.env.AWS_REGION;
+
 // Sets up the Express App
 // =============================================================
 const app = express();
