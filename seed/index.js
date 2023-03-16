@@ -33,7 +33,7 @@ const generatePictures = (numberOfPictures, numberOfUsers) => {
 			userId: Math.ceil(numberOfUsers * Math.random()),
 			name: randomWords(5),
 			description: randomWords(25),
-			S3URL: "Test.url",
+			S3URL: `http://placekitten.com/${Math.ceil(Math.random() * 200 + 200)}/${Math.ceil(Math.random() * 200 + 200)}`,
 		});
 	}
 	return pictures;

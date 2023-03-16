@@ -192,7 +192,7 @@ router.get("/:userId/feed", async (req, res) => {
 		/** @type {Array<{id:number, createdAt:number}>} */
 		const pictures = galleryPictures.concat(userPictures);
 
-		pictures.sort((a, b) => a.createdAt - b.createdAt);
+		pictures.sort((a, b) => b.createdAt - a.createdAt);
 
 		pictures.splice(pageLength * (pageNumber + 1));
 
@@ -235,7 +235,7 @@ router.get("/:userId/profile", async (req, res) => {
 			]
 		});
 
-		const pictures = user.pictures.sort((a, b) => a.createdAt - b.createdAt).map(picture => picture.id);
+		const pictures = user.pictures.sort((a, b) => b.createdAt - a.createdAt).map(picture => picture.id);
 		pictures.splice(pageLength * (pageNumber + 1));
 
 		if (!user) {

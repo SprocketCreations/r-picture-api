@@ -5,7 +5,7 @@ const allRoutes = require('./controllers');
 const sequelize = require('./config/connection');
 const { extractTokenMiddleware } = require("./utils/jwt");
 //Cors is used to allow front-end connect to the back-end database (will be used latter)
-const cors = require("cors")
+const cors = require("cors");
 
 // Sets up the Express App
 // =============================================================

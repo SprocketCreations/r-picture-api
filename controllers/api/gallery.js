@@ -37,7 +37,7 @@ router.get("/:galleryId", async (req, res) => {
 			],
 		});
 
-		const pictures = gallery.pictures.sort((a, b) => a.createdAt - b.createdAt).map(picture => picture.id);
+		const pictures = gallery.pictures.sort((a, b) => b.createdAt - a.createdAt).map(picture => picture.id);
 		pictures.splice(pageLength * (pageNumber + 1));
 		const responseJson = picturesOnly ? {
 			pageLength: pageLength,

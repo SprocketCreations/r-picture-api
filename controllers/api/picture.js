@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const router = express.Router();
 
 const { Picture, Gallery, GalleryPicture, PictureTag, Tag, User, Comment, Like } = require('../../models');
+const cloudinary = require("../../config/cloudinary");
 
 router.post("/:pictureId/gallery", async (req, res) => {
 	try {
@@ -155,25 +156,27 @@ router.post("/", async (req, res) => {
 			return res.sendStatus(403);
 		}
 
-		if (!(req.body.name)) {
+		if (!(req.fields.name) || !(req.fields.picture)) {
 			return res.sendStatus(400);
 		}
 
-		if (!process.env.S3_BUCKET) throw new Error("S3_BUCKET environment variable is not configured.");
+		const fileName = `${uuidv4()}`;
 
-		const fileName = `${uuidv4()}.jpg`;
+		const cloudinaryRes = await cloudinary.uploader.upload(req.fields.picture, { public_id: fileName });
 
 		const picture = await Picture.create({
 			userId: req.jwt.userId,
-			name: req.body.name,
-			description: req.body.description,
-			S3URL: url
+			name: req.fields.name,
+			description: req.fields.description,
+			S3URL: cloudinaryRes.secure_url
 		});
 
-		if (req.body.tags) {
+		const tags = JSON.parse(req.fields.tags);
+
+		if (tags) {
 			const allTagIds = [];
-			for (let i = 0; i < req.body.tags.length; ++i) {
-				const tagName = req.body.tags[i].toLowerCase();
+			for (let i = 0; i < tags.length; ++i) {
+				const tagName = tags[i].toLowerCase();
 				const [nextTag] = await Tag.findOrCreate({
 					where: {
 						name: tagName
@@ -194,8 +197,7 @@ router.post("/", async (req, res) => {
 			id: picture.id,
 			name: picture.name,
 			description: picture.description,
-			url: url,
-			signedRequest: signedRequest
+			url: cloudinaryRes.secure_url
 		});
 	} catch (error) {
 		console.log(error);
