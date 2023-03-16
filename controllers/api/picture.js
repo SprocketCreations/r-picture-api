@@ -1,7 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require("uuid");
 const router = express.Router();
-const aws = require("aws-sdk");
 
 const { Picture, Gallery, GalleryPicture, PictureTag, Tag, User, Comment, Like } = require('../../models');
 
@@ -152,23 +151,6 @@ router.get("/:pictureId", async (req, res) => {
 
 router.post("/", async (req, res) => {
 	try {
-		/**
-		 * @param {string} url The url to sign.
-		 */
-		const signUrl = async url => { };
-
-		/**
-		 * @param {string} url The url to hit.
-		 */
-		const hitUrl = async url => {
-			try {
-				return await new aws.S3().headObject({ Bucket: process.env.S3_BUCKET, Key: url }).promise();
-			} catch (error) {
-				console.log(error);
-				return null;
-			}
-		};
-
 		if (!(req.jwt.userId)) {
 			return res.sendStatus(403);
 		}
@@ -180,20 +162,6 @@ router.post("/", async (req, res) => {
 		if (!process.env.S3_BUCKET) throw new Error("S3_BUCKET environment variable is not configured.");
 
 		const fileName = `${uuidv4()}.jpg`;
-		const url = `https://${process.env.S3_BUCKET}.s3.amazonaws.com/${fileName}`;
-
-		const signedRequest = await new Promise(
-			(resolve, reject) => new aws.S3().getSignedUrl(
-				"putObject",
-				{
-					Bucket: process.env.S3_BUCKET,
-					Key: fileName,
-					Expires: 60,
-					ContentType: "jpg",
-					ACL: "public-read"
-				},
-				(error, data) => error ? reject(error) : resolve(data)
-			));
 
 		const picture = await Picture.create({
 			userId: req.jwt.userId,
