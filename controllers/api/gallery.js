@@ -67,7 +67,7 @@ router.post("/", async (req, res) => {
 			return res.sendStatus(403);
 		}
 
-		if (!(req.body.name) || !(req.body.description)) {
+		if (!(req.body.name)) {
 			return res.sendStatus(400);
 		}
 		if (typeof (req.body.name) !== 'string' || typeof (req.body.description) !== 'string') {

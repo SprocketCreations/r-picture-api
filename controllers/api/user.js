@@ -137,6 +137,31 @@ router.delete("/:userId", async (req, res) => {
 	}
 })
 
+router.get("/0/feed", async (req, res) => {
+	try {
+		const pageLength = parseInt(req.query["page-length"]) || 10;
+		const pageNumber = parseInt(req.query["page-number"]) || 0;
+
+
+		const pictures = await Picture.findAll({
+			limit: pageLength,
+			offset: pageLength * pageNumber,
+			order: [
+				["createdAt", "DESC"]
+			],
+			attributes: ["id"]
+		});
+
+		return res.status(200).json({
+			pageLength: pageLength,
+			pageNumber: pageNumber,
+			pictures: pictures.map(picture => picture.id)
+		});
+	} catch (err) {
+		console.log(err);
+		return res.sendStatus(500);
+	}
+});
 //18
 router.get("/:userId/feed", async (req, res) => {
 	try {

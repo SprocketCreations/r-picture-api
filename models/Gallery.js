@@ -13,7 +13,7 @@ const sequelize = require("../config/connection.js");
  * @property {number} galleryPictureId The id of the through table to pictures.
  * 
  * @property {string} name The display name of the gallery.
- * @property {string} description The description of the gallery.
+ * @property {string?} description The description of the gallery.
  * 
  * @property {Date} createdAt The date/time that the gallery was created at.
  * @property {Date} updatedAt The date/time that the gallery was last updated at.
@@ -32,7 +32,7 @@ Gallery.init({
 		type: DataTypes.TEXT,
 		allowNull: true,
 		validate: {
-			notEmpty: true,
+			
 		}
 	}
 }, {

@@ -115,6 +115,8 @@ router.get("/:pictureId", async (req, res) => {
 			]
 		});
 
+		if(!picture) return res.sendStatus(404);
+
 		return res.json({
 			id: picture.id,
 			name: picture.name,
