@@ -155,7 +155,7 @@ router.get("/0/feed", async (req, res) => {
 		return res.status(200).json({
 			pageLength: pageLength,
 			pageNumber: pageNumber,
-			pictures: pictures.map(picture => ({id: picture.id}))
+			pictures: pictures.map(picture => ({ id: picture.id }))
 		});
 	} catch (err) {
 		console.log(err);
@@ -281,6 +281,36 @@ router.get("/:userId/profile", async (req, res) => {
 		res.sendStatus(500);
 	}
 })
+
+router.get("/:userId/gallery", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		const followingGalleryIds = (await GalleryUser.findAll({
+			attributes: [],
+			where: {
+				followerUserId: req.jwt.userId
+			},
+			include: [{
+				model: Gallery,
+				as: "followedGallery",
+				attributes: ["id", "name"],
+			}]
+		}))?.map(galleryUser => ({
+			id: galleryUser.followedGallery.id,
+			name: galleryUser.followedGallery.name
+		}));
+
+		return res.status(200).json({
+			galleries: followingGalleryIds
+		});
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
 
 router.post("/:userId/follow-gallery/:galleryId", async (req, res) => {
 	try {
