@@ -7,11 +7,15 @@ const cloudinary = require("../../config/cloudinary");
 
 router.post("/:pictureId/gallery", async (req, res) => {
 	try {
-		const userId = 1;
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
+		}
+
 		if (!(req.body.galleryId)) {
 			return res.sendStatus(400);
 		}
 
+		// Check that the picture and gallery exist. Cant forward null to null
 		const [pictureCount, galleryCount] = await Promise.all([
 			Picture.count({ where: { id: req.params.pictureId } }),
 			Gallery.count({ where: { id: req.body.galleryId } })
@@ -20,23 +24,14 @@ router.post("/:pictureId/gallery", async (req, res) => {
 		if (pictureCount === 0 || galleryCount === 0) {
 			return res.sendStatus(404);
 		}
-		const token = req.headers?.authorization?.split(" ")[1];
-		if (!token) {
-			res.sendStatus(403)
-		}
-		try {
-			const data = jwt.verify(token, process.env.JWT_SECRET)
-			await GalleryPicture.create({
-				userId: data.id,
-				galleryId: req.body.galleryId,
-				pictureId: req.params.pictureId
-			});
 
-			return res.sendStatus(204);
-		} catch (err) {
-			console.log(err);
-			return res.status(403).json({ msg: "Invalid or missing token" })
-		}
+		await GalleryPicture.create({
+			userId: req.jwt.userId,
+			galleryId: req.body.galleryId,
+			pictureId: req.params.pictureId
+		});
+
+		return res.sendStatus(204);
 	} catch (error) {
 		if (error.name === "SequelizeUniqueConstraintError") {
 			return res.sendStatus(409);
@@ -48,30 +43,23 @@ router.post("/:pictureId/gallery", async (req, res) => {
 
 router.delete("/:pictureId/gallery/:galleryId", async (req, res) => {
 	try {
-		const userId = 1;
-		const token = req.headers?.authorization?.split(" ")[1];
-		if (!token) {
-			res.sendStatus(403)
+		if (!(req.jwt.userId)) {
+			return res.sendStatus(403);
 		}
-		try {
-			const data = jwt.verify(token, process.env.JWT_SECRET)
-			const rows = await GalleryPicture.destroy({
-				where: {
-					userId: data.id,
-					galleryId: req.params.galleryId,
-					pictureId: req.params.pictureId
-				}
-			});
-			if (rows === 0) {
-				return res.sendStatus(404);
+
+		const rows = await GalleryPicture.destroy({
+			where: {
+				userId: req.jwt.userId,
+				galleryId: req.params.galleryId,
+				pictureId: req.params.pictureId
 			}
-
-			return res.status(200).json({ rows: rows });
-		} catch (err) {
-			console.log(err);
-			return res.status(403).json({ msg: "Invalid or missing token" })
+		});
+		
+		if (rows === 0) {
+			return res.sendStatus(404);
 		}
 
+		return res.status(200).json({ rows: rows });
 	} catch (error) {
 		console.log(error);
 		return res.sendStatus(500);
@@ -115,7 +103,7 @@ router.get("/:pictureId", async (req, res) => {
 			]
 		});
 
-		if(!picture) return res.sendStatus(404);
+		if (!picture) return res.sendStatus(404);
 
 		return res.json({
 			id: picture.id,
