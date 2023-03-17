@@ -155,7 +155,7 @@ router.get("/0/feed", async (req, res) => {
 		return res.status(200).json({
 			pageLength: pageLength,
 			pageNumber: pageNumber,
-			pictures: pictures.map(picture => picture.id)
+			pictures: pictures.map(picture => ({id: picture.id}))
 		});
 	} catch (err) {
 		console.log(err);
