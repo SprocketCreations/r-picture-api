@@ -1,7 +1,9 @@
 const express = require('express');
+const { v4: uuidv4 } = require("uuid");
 const router = express.Router();
 
 const { Picture, Gallery, GalleryPicture, PictureTag, Tag, User, Comment, Like } = require('../../models');
+const cloudinary = require("../../config/cloudinary");
 
 router.post("/:pictureId/gallery", async (req, res) => {
 	try {
@@ -80,7 +82,7 @@ router.get("/:pictureId", async (req, res) => {
 	try {
 		const picture = await Picture.findByPk(req.params.pictureId, {
 			model: Picture,
-			attributes: ["id", "name", "S3URL"],
+			attributes: ["id", "name", "description", "S3URL"],
 			include: [
 				{
 					through: {
@@ -101,17 +103,19 @@ router.get("/:pictureId", async (req, res) => {
 					attributes: ["id", "displayName"]
 				}, {
 					model: Comment,
-					attributes: ["id", "text"],
+					attributes: ["id", "text", "createdAt"],
 					include: [{
 						model: User,
 						attributes: ["id", "displayName"]
 					}]
 				}, {
 					model: Like,
-					attributes: ["id", "delta"]
+					attributes: ["id", "delta", "userId"]
 				}
 			]
 		});
+
+		if(!picture) return res.sendStatus(404);
 
 		return res.json({
 			id: picture.id,
@@ -119,7 +123,7 @@ router.get("/:pictureId", async (req, res) => {
 			description: picture.description,
 			imageURL: picture.S3URL,
 			score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-			like: picture.likes.find(like => like.id === req.jwt?.userId),
+			like: picture.likes.find(like => like.userId === req.jwt?.userId),
 			owner: {
 				id: picture.user.id,
 				displayName: picture.user.displayName
@@ -127,9 +131,10 @@ router.get("/:pictureId", async (req, res) => {
 			galleries: picture.galleries.map(gallery => ({
 				id: gallery.id,
 				name: gallery.name,
-				followerCount: gallery.followedGallery.length
+				followerCount: gallery.followedGallery.length,
+				following: !!gallery.followedGallery.find(user => user.id === req.jwt?.userId)
 			})),
-			comments: picture.comments.map(comment => ({
+			comments: picture.comments.sort((a, b) => b.createdAt - a.createdAt).map(comment => ({
 				id: comment.id,
 				text: comment.text,
 				...(comment.user ? {
@@ -146,27 +151,34 @@ router.get("/:pictureId", async (req, res) => {
 	}
 })
 
+
 router.post("/", async (req, res) => {
 	try {
 		if (!(req.jwt.userId)) {
 			return res.sendStatus(403);
 		}
 
-		if (!(req.body.name) || !(req.body.description)) {
+		if (!(req.fields.name) || !(req.fields.picture)) {
 			return res.sendStatus(400);
 		}
 
+		const fileName = `${uuidv4()}`;
+
+		const cloudinaryRes = await cloudinary.uploader.upload(req.fields.picture, { public_id: fileName });
+
 		const picture = await Picture.create({
 			userId: req.jwt.userId,
-			name: req.body.name,
-			description: req.body.description,
-			S3URL: "placeholderurl.com"
+			name: req.fields.name,
+			description: req.fields.description,
+			S3URL: cloudinaryRes.secure_url
 		});
 
-		if (req.body.tags) {
+		const tags = JSON.parse(req.fields.tags);
+
+		if (tags) {
 			const allTagIds = [];
-			for (let i = 0; i < req.body.tags.length; ++i) {
-				const tagName = req.body.tags[i].toLowerCase();
+			for (let i = 0; i < tags.length; ++i) {
+				const tagName = tags[i].toLowerCase();
 				const [nextTag] = await Tag.findOrCreate({
 					where: {
 						name: tagName
@@ -186,7 +198,8 @@ router.post("/", async (req, res) => {
 		return res.status(201).json({
 			id: picture.id,
 			name: picture.name,
-			description: picture.description
+			description: picture.description,
+			url: cloudinaryRes.secure_url
 		});
 	} catch (error) {
 		console.log(error);
@@ -210,7 +223,7 @@ router.put("/:pictureId", async (req, res) => {
 				userId: req.jwt.userId
 			}
 		});
-		
+
 		if (rows !== 1) {
 			return res.sendStatus(404);
 		}

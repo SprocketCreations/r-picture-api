@@ -39,11 +39,14 @@ Gallery.belongsToMany(Picture, { through: GalleryPicture });
 User.belongsToMany(Gallery, { through: GalleryUser, as: { singular: "galleryFollowingUser", plural: "galleryFollowingUser" }, foreignKey: "followerUserId" });
 Gallery.belongsToMany(User, { through: GalleryUser, as: { singular: "followedGallery", plural: "followedGallery" }, foreignKey: "followedGalleryId" });
 
+GalleryUser.belongsTo(Gallery, { as: "followedGallery" });
+
 User.belongsToMany(User, { through: UserUser, as: { singular: "userFollowingUser", plural: "userFollowingUser" }, foreignKey: "followerUserId" });
 User.belongsToMany(User, { through: UserUser, as: { singular: "followedUser", plural: "followedUser" }, foreignKey: "followedUserId" });
 
 UserUser.belongsTo(User, { as: "followedUser" });
 UserUser.belongsTo(User, { as: "userFollowingUser" });
+
 
 module.exports = {
 	Comment,

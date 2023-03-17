@@ -21,8 +21,8 @@
   },
   "homepage": "https://github.com/tvu328/R-Picture-Back#readme",
   "dependencies": {
-    "aws-sdk": "^2.1328.0",
     "bcrypt": "^5.1.0",
+    "cloudinary": "^1.35.0",
     "cors": "^2.8.5",
     "dayjs": "^1.11.7",
     "dotenv": "^16.0.3",

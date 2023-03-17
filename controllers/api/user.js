@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcrypt");
-const { User, Picture, Gallery, Comment, Like } = require("../../models");
+const { User, Picture, Gallery, Comment, Like, GalleryUser, UserUser } = require("../../models");
 const jwt = require("jsonwebtoken");
 const { signUser } = require("../../utils/jwt");
 
@@ -137,6 +137,31 @@ router.delete("/:userId", async (req, res) => {
 	}
 })
 
+router.get("/0/feed", async (req, res) => {
+	try {
+		const pageLength = parseInt(req.query["page-length"]) || 10;
+		const pageNumber = parseInt(req.query["page-number"]) || 0;
+
+
+		const pictures = await Picture.findAll({
+			limit: pageLength,
+			offset: pageLength * pageNumber,
+			order: [
+				["createdAt", "DESC"]
+			],
+			attributes: ["id"]
+		});
+
+		return res.status(200).json({
+			pageLength: pageLength,
+			pageNumber: pageNumber,
+			pictures: pictures.map(picture => ({id: picture.id}))
+		});
+	} catch (err) {
+		console.log(err);
+		return res.sendStatus(500);
+	}
+});
 //18
 router.get("/:userId/feed", async (req, res) => {
 	try {
@@ -144,89 +169,65 @@ router.get("/:userId/feed", async (req, res) => {
 			return res.sendStatus(403);
 		}
 
-		const userId = 1;
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
 
-		const user = await User.findByPk(req.params.userId, {
-			limit: pageLength,
-			offset: pageNumber * pageLength,
-			subQuery: false,
-			include: [{
-				model: Gallery,
-				as: "galleryFollowingUser",
+		/** @type {number[]} */
+		const followingGalleryIds = (await GalleryUser.findAll({
+			attributes: ["followedGalleryId"],
+			where: {
+				followerUserId: req.jwt.userId
+			}
+		}))?.map(galleryUser => galleryUser.followedGalleryId);
+
+		/** @type {number[]} */
+		const followingUserIds = (await UserUser.findAll({
+			attributes: ["followedUserId"],
+			where: {
+				followerUserId: req.jwt.userId
+			},
+		}))?.map(userUser => userUser.followedUserId);
+
+		const galleryPicturePromises = followingGalleryIds.map(async galleryId => {
+			const gallery = await Gallery.findByPk(galleryId, {
 				include: [{
 					model: Picture,
-					attributes: ["id", "name", "S3URL"],
-					include: [
-						{
-							model: User,
-							attributes: ["displayName"]
-						}, {
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "delta"]
-						}
-					]
+					attributes: ["id", "createdAt"]
 				}]
-			}, {
-				through: {
-					attributes: []
-				},
-				model: User,
-				as: "userFollowingUser",
-				attributes: ["id", "displayName"],
+			});
+			return gallery?.pictures?.map(picture => ({ id: picture.id, createdAt: picture.createdAt, galleryId: galleryId })) || [];
+		});
+
+		const userPicturePromises = followingUserIds.map(async userId => {
+			const user = await User.findByPk(userId, {
 				include: [{
 					model: Picture,
-					attributes: ["id", "name", "S3URL"],
-					include: [
-						{
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "delta"]
-						}
-					]
+					attributes: ["id", "createdAt"]
 				}]
-			}]
-		})
+			});
+			return user?.pictures?.map(picture => ({ id: picture.id, createdAt: picture.createdAt })) || [];
+		});
 
-		if (!user) {
-			return res.sendStatus(404);
-		}
+		/** @type {[[], []]} */
+		let [galleryPictures, userPictures] = await Promise.all([Promise.all(galleryPicturePromises), Promise.all(userPicturePromises)]);
 
-		const galleryPictures = user.galleryFollowingUser.reduce((pictures, gallery) => {
-			return pictures.concat(gallery.pictures.map(picture => ({
-				id: picture.id,
-				name: picture.name,
-				commentCount: picture.comments.length,
-				imageURL: picture.S3URL,
-				score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-				like: picture.likes.find(like => like.id === userId),
+		galleryPictures = galleryPictures.reduce((allPictures, pictures) => allPictures.concat(pictures), []);
+		userPictures = userPictures.reduce((allPictures, pictures) => allPictures.concat(pictures), []);
 
-			})))
-		}, []);
+		/** @type {Array<{id:number, createdAt:number}>} */
+		const pictures = galleryPictures.concat(userPictures);
 
-		const pictures = user.userFollowingUser.reduce((pictures, users) => {
-			return pictures.concat(users.pictures.map(picture => ({
-				id: picture.id,
-				name: picture.name,
-				commentCount: picture.comments.length,
-				imageURL: picture.S3URL,
-				score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-				like: picture.likes.find(like => like.id === userId),
-			})));
-		}, []);
+		pictures.sort((a, b) => b.createdAt - a.createdAt);
 
-		const feedPictures = galleryPictures.concat(pictures);
+		pictures.splice(pageLength * (pageNumber + 1));
 
-		return res.status(201).json({
+		return res.status(200).json({
 			pageLength: pageLength,
 			pageNumber: pageNumber,
-			pictures: feedPictures
+			pictures: pictures.map(picture => ({
+				id: picture.id,
+				galleryId: picture.galleryId
+			}))
 		});
 	} catch (err) {
 		console.log(err);
@@ -237,15 +238,12 @@ router.get("/:userId/feed", async (req, res) => {
 //20
 router.get("/:userId/profile", async (req, res) => {
 	try {
-		const userId = 1;
+		const userId = req.jwt?.userId;
 		const picturesOnly = (req.query["pictures-only"] === 'true') || false;
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
 
 		const user = await User.findByPk(req.params.userId, {
-			limit: pageLength,
-			offset: pageNumber * pageLength,
-			subQuery: false,
 			attributes: picturesOnly ? [] : ["bio", "id", "displayName"],
 			include: [
 				...(picturesOnly ? [] : [{
@@ -253,49 +251,111 @@ router.get("/:userId/profile", async (req, res) => {
 						attributes: []
 					},
 					model: User,
-					as: "userFollowingUser",
+					as: "followedUser",
 					attributes: ["id"]
-				}]),
-				{
+				}]), {
 					model: Picture,
-					attributes: ["id", "name", "S3URL"],
-					include: [
-						{
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "delta"]
-						}
-					]
+					attributes: ["id", "createdAt"]
 				}
 			]
-		})
+		});
 
-		const pictures = user.pictures.map(picture => ({
-			id: picture.id,
-			name: picture.name,
-			commentCount: picture.comments.length,
-			imageURL: picture.S3URL,
-			score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-			like: picture.likes.find(like => like.id === userId),
-		}));
+		const pictures = user.pictures.sort((a, b) => b.createdAt - a.createdAt).map(picture => picture.id);
+		pictures.splice(pageLength * (pageNumber + 1));
 
 		if (!user) {
-			res.sendStatus(404)
+			return res.sendStatus(404);
 		}
-		res.json(picturesOnly ? { pictures: pictures } : {
+
+		return res.json(picturesOnly ? { pictures: pictures } : {
 			id: user.id,
 			displayName: user.displayName,
 			bio: user.bio,
-			following: !!user.userFollowingUser.find(user => user.id === userId),
-			followerCount: user.userFollowingUser.length,
+			following: !!user.followedUser.find(user => user.id === userId),
+			followerCount: user.followedUser.length,
+			followers: user.followedUser,
 			pictures: pictures
-		})
+		});
 	} catch (err) {
 		console.log(err);
 		res.sendStatus(500);
 	}
 })
+
+router.post("/:userId/follow-gallery/:galleryId", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		await GalleryUser.create({
+			followerUserId: req.params.userId,
+			followedGalleryId: req.params.galleryId
+		});
+
+		return res.sendStatus(201);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
+
+router.delete("/:userId/follow-gallery/:galleryId", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		await GalleryUser.destroy({
+			where: {
+				followerUserId: req.params.userId,
+				followedGalleryId: req.params.galleryId
+			}
+		});
+
+		return res.sendStatus(200);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
+
+router.post("/:userId/follow-user/:userId2", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		await UserUser.create({
+			followerUserId: req.params.userId,
+			followedUserId: req.params.userId2
+		});
+
+		return res.sendStatus(201);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
+
+router.delete("/:userId/follow-user/:userId2", async (req, res) => {
+	try {
+		if (req.jwt.userId !== parseInt(req.params.userId)) {
+			return res.sendStatus(403);
+		}
+
+		console.log(await UserUser.destroy({
+			where: {
+				followerUserId: req.params.userId,
+				followedUserId: req.params.userId2
+			}
+		}));
+
+		return res.sendStatus(200);
+	} catch (err) {
+		console.log(err);
+		res.sendStatus(500);
+	}
+});
 
 module.exports = router;

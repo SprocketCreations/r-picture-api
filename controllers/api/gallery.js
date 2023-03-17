@@ -10,13 +10,10 @@ router.get("/:galleryId", async (req, res) => {
 		const pageLength = parseInt(req.query["page-length"]) || 10;
 		const pageNumber = parseInt(req.query["page-number"]) || 0;
 
-		const userId = 1;
+		const userId = req.jwt?.userId;
 		const galleryId = req.params.galleryId;
 
 		const gallery = await Gallery.findByPk(galleryId, {
-			limit: pageLength,
-			offset: pageNumber * pageLength,
-			subQuery: false,
 			attributes: picturesOnly ? [] : [
 				"id",
 				"name",
@@ -30,42 +27,25 @@ router.get("/:galleryId", async (req, res) => {
 					model: User,
 					as: "followedGallery",
 					attributes: ["id"],
-				}]),
-				{
+				}]), {
 					through: {
 						attributes: []
 					},
-					model: Picture,
-					attributes: ["id", "name", "S3URL"],
-					include: [
-						{
-							model: User,
-							attributes: ["displayName"]
-						}, {
-							model: Comment,
-							attributes: ["id"]
-						}, {
-							model: Like,
-							attributes: ["id", "delta"]
-						}
-					]
+					attributes: ["id", "createdAt"],
+					model: Picture
 				}
 			],
 		});
 
-		const pictures = gallery.pictures.map(picture => ({
-			id: picture.id,
-			name: picture.name,
-			ownerName: picture.user.displayName,
-			commentCount: picture.comments.length,
-			imageURL: picture.S3URL,
-			score: picture.likes.reduce((score, { delta }) => score + delta, 0),
-			like: picture.likes.find(like => like.id === userId),
-		}));
-
+		const pictures = gallery.pictures.sort((a, b) => b.createdAt - a.createdAt).map(picture => picture.id);
+		pictures.splice(pageLength * (pageNumber + 1));
 		const responseJson = picturesOnly ? {
+			pageLength: pageLength,
+			pageNumber: pageNumber,
 			pictures: pictures,
 		} : {
+			pageLength: pageLength,
+			pageNumber: pageNumber,
 			id: gallery.id,
 			name: gallery.name,
 			description: gallery.description,
@@ -87,7 +67,7 @@ router.post("/", async (req, res) => {
 			return res.sendStatus(403);
 		}
 
-		if (!(req.body.name) || !(req.body.description)) {
+		if (!(req.body.name)) {
 			return res.sendStatus(400);
 		}
 		if (typeof (req.body.name) !== 'string' || typeof (req.body.description) !== 'string') {
